@@ -1,8 +1,10 @@
 package com.sanosysalvos.bff.service;
 
 import com.sanosysalvos.bff.config.ServiciosProperties;
+import org.springframework.http.HttpHeaders;
+import java.util.Collections;
 
-import org.springframework.http.HttpMethod;  // ← CORRECTO
+import org.springframework.http.HttpMethod; // ← CORRECTO
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,21 +26,27 @@ public class ProxyService {
         String nombreEnEureka = serviciosProperties.getRutas().get(nombreServicio); /* busca el nombre en Eureka */
 
         if (!estaDisponible(nombreEnEureka)) {
-            return ResponseEntity.status(202).header("Retry-After", "5").body("Solicitud en cola, reintenta en 5 segundos".getBytes()); /* si no está disponible, devuelve 202 con retry-after */
+            return ResponseEntity
+                    .status(202).header("Retry-After", "5").body("Solicitud en cola, reintenta en 5 segundos"
+                            .getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
 
         String rutaDestino = request.getRequestURI().substring("/api/v1".length()); /* saca el prefijo /api/v1 */
         String urlDestino = "http://" + nombreEnEureka + rutaDestino; /* arma la URL completa al microservicio */
 
-        HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /*
-                                                                          * convierte el método HTTP a tipo HttpMethod
-                                                                          */
+        HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
+
+        /* copiar headers de la petición original para que el JWT llegue a los MS */
+        HttpHeaders headers = new HttpHeaders();
+        Collections.list(request.getHeaderNames())
+                .forEach(name -> headers.add(name, request.getHeader(name)));
 
         ResponseEntity<byte[]> respuesta = restClient.method(httpMethod)
                 .uri(urlDestino)
-                .body(body) /* envía el body original */
-                .retrieve()
-                .toEntity(byte[].class); /* devuelve la respuesta como bytes */
+                .headers(h -> h.addAll(headers)) /* pasa todos los headers incluyendo Authorization */
+                .body(body)
+                .retrieve()// ejecuta la llamada http para obtener(get) la respuesta del microservicio destino
+                .toEntity(byte[].class);
 
         return respuesta;
     }

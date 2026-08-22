@@ -4,6 +4,12 @@ spring:
   config:
     import: optional:configserver:http://localhost:8888 #opcional por ahora el config server
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: https://cognito-idp.${cognito.region}.amazonaws.com/${cognito.user-pool-id}/.well-known/jwks.json
+
 server:
   port: 8081 #puerto del bff
 
@@ -22,3 +28,9 @@ servicios: #configuración de los servicios
 
 bff:
   retry-after: 5 #tiempo de espera para reintentar la solicitud
+
+cognito:
+  region: us-east-1 #región de cognito
+  user-pool-id: us-east-1_XXXXXXXXX #id del user pool de cognito como placeholder por ahora
+
+
