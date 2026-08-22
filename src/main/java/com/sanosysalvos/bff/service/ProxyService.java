@@ -24,7 +24,7 @@ public class ProxyService {
         String nombreEnEureka = serviciosProperties.getRutas().get(nombreServicio); /* busca el nombre en Eureka */
 
         if (!estaDisponible(nombreEnEureka)) {
-            return ResponseEntity.status(503).body("Servicio no disponible".getBytes());
+            return ResponseEntity.status(202).header("Retry-After", "5").body("Solicitud en cola, reintenta en 5 segundos".getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
 
         String rutaDestino = request.getRequestURI().substring("/api/v1".length()); /* saca el prefijo /api/v1 */

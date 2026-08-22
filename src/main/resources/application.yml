@@ -16,3 +16,9 @@ servicios: #configuración de los servicios
   rutas:
     mascotas: ms-mascotas #ruta/mascotas ->nombre en eureka
     alertas: ms-notificaciones #ruta/alertas ->nombre en eureka
+
+
+
+
+bff:
+  retry-after: 5 #tiempo de espera para reintentar la solicitud
