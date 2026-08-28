@@ -25,6 +25,11 @@ public class SecurityConfig {
             )
             .oauth2ResourceServer(oauth2 -> oauth2
                 .jwt(jwt -> {})
+                /* TODO: validar aud (audience) cuando tengamos el Client ID de Cognito en AWS
+                * verifica que el token fue emitido para esta app y no para otra
+                * .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                */
+
             )
             .addFilterAfter(jwtFilter, UsernamePasswordAuthenticationFilter.class); /* ejecutar después de Spring Security */
 

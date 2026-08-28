@@ -22,16 +22,15 @@ public class ProxyService {
     public ResponseEntity<byte[]> proxy(HttpServletRequest request, byte[] body) {
 
         String[] segmentos = request.getRequestURI().split("/"); /* divide la URI en segmentos */
-        String nombreServicio = segmentos[3]; /* extrae el microservicio: /api/v1/[aquí]/... */
+        String nombreServicio = segmentos[3]; /* extrae el microservicio: /api/v1/[aquí]/..podemos cambiar a dos segundos el tiempo de respuesta. */ 
         String nombreEnEureka = serviciosProperties.getRutas().get(nombreServicio); /* busca el nombre en Eureka */
 
         if (!estaDisponible(nombreEnEureka)) {
             return ResponseEntity
-                    .status(202).header("Retry-After", "5").body("Solicitud en cola, reintenta en 5 segundos"
+                    .status(202).header("Retry-After", "2").body("Solicitud en cola, reintenta en 2 segundos"
                             .getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
-
-        String rutaDestino = request.getRequestURI().substring("/api/v1".length()); /* saca el prefijo /api/v1 */
+        String rutaDestino = request.getRequestURI().substring("/api/v1".length());
         String urlDestino = "http://" + nombreEnEureka + rutaDestino; /* arma la URL completa al microservicio */
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */

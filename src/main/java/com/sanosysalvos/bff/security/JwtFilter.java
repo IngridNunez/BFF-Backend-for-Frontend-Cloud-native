@@ -25,7 +25,7 @@ public class JwtFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        /* extraer el id token */
+        /* extraer el id token (sub) */
         String idTokenHeader = request.getHeader("X-Id-Token");
         if (idTokenHeader == null || !idTokenHeader.startsWith("Bearer ")) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token no proporcionado");
@@ -33,11 +33,21 @@ public class JwtFilter extends OncePerRequestFilter {
         }
         String idTokenString = idTokenHeader.substring(7);
 
+        /* verificar que el refresh token existe y no está vacío */
+        String refreshToken = request.getHeader("X-Refresh-Token");
+        if (refreshToken == null || refreshToken.isBlank()) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
+            return;
+        }
+
         try {
             /* validar el id token usando el decoder de Spring Security */
             Jwt idToken = jwtDecoder.decode(idTokenString);
 
-            /* obtener el sub del access token ya validado por Spring Security , el sub es el identificador único del usuario */
+            /*
+             * obtener el sub del access token ya validado por Spring Security , el sub es
+             * el identificador único del usuario
+             */
             Jwt accessToken = (Jwt) SecurityContextHolder.getContext()
                     .getAuthentication().getPrincipal();
             String accessSub = accessToken.getSubject();
