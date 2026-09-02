@@ -25,15 +25,11 @@ servicios: #configuración de los servicios
     usuarios: ms-usuarios #ruta/usuarios ->nombre en eureka
 
 
-
-
 bff:
   retry-after: 5 #tiempo de espera para reintentar la solicitud
 
 cognito:
   region: us-east-1 #región de cognito
-  user-pool-id: us-east-1_XXXXXXXXX #id del user pool de cognito como placeholder por ahora
-
-
-
+  user-pool-id: ${COGNITO_USER_POOL_ID} #id del user pool de cognito
+  client-id: ${COGNITO_CLIENT_ID} #id del cliente de cognito
 

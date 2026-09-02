@@ -1,15 +1,17 @@
 package com.sanosysalvos.bff.service;
 
-import com.sanosysalvos.bff.config.ServiciosProperties;
-import org.springframework.http.HttpHeaders;
 import java.util.Collections;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod; // ← CORRECTO
-import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+
+import com.sanosysalvos.bff.config.ServiciosProperties;
+
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +41,11 @@ public class ProxyService {
         HttpHeaders headers = new HttpHeaders();
         Collections.list(request.getHeaderNames())
                 .forEach(name -> headers.add(name, request.getHeader(name)));
+        /* agregar el sub extraido del JWT como header para los microservicios */
+        String userId = (String) request.getAttribute("X-User-Id");
+        if (userId != null) {
+            headers.add("X-User-Id", userId);
+        }
 
         ResponseEntity<byte[]> respuesta = restClient.method(httpMethod)
                 .uri(urlDestino)
