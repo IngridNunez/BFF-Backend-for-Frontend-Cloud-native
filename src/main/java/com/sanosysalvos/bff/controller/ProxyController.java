@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /* captura todas las peticiones y las reenvía al ms correspondiente */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/v1") /*cambiar */
 @RequiredArgsConstructor
 public class ProxyController {
 
@@ -23,3 +23,8 @@ public class ProxyController {
         return proxyService.proxy(request, body); /* delega al service */
     }
 }
+
+// pull en actions se crea un archivo .env y se configura a nivel de repositorio, 
+
+
+
