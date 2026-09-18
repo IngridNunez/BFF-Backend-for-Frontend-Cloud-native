@@ -1,3 +1,4 @@
+###################################
 services:
   app:
     build: .
@@ -12,19 +13,17 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - ticketti-network
+      - sanos-y-salvos-network
     environment:
       SERVER_PORT: 8081
-      SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT}
-      API_GATEWAY_URL: ${API_GATEWAY_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      RABBITMQ_HOST: ${RABBITMQ_HOST}
-      RABBITMQ_PORT: ${RABBITMQ_PORT}
-      RABBITMQ_USER: ${RABBITMQ_USER}
-      RABBITMQ_PASS: ${RABBITMQ_PASS}
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-optional:configserver:http://config-server:8888}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://discovery-server:8761/eureka/}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
 
 networks:
-  ticketti-network:
+  sanos-y-salvos-network:
+    # la crea config-server (external: false ahí); acá solo nos unimos, igual que discovery-server
     external: true
-    name: ticketti-network
+    name: sanos-y-salvos-network
+###################################

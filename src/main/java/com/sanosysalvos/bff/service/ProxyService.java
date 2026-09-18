@@ -46,6 +46,13 @@ public class ProxyService {
         if (userId != null) {
             headers.add("X-User-Id", userId);
         }
+        // ###################################
+        /* agregar el correo extraido del id token como header (ms-mascotas guarda el correo del dueño) */
+        String userEmail = (String) request.getAttribute("X-User-Email");
+        if (userEmail != null) {
+            headers.add("X-User-Email", userEmail);
+        }
+        // ###################################
 
         ResponseEntity<byte[]> respuesta = restClient.method(httpMethod)
                 .uri(urlDestino)
