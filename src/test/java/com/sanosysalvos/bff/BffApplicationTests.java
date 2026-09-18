@@ -12,6 +12,9 @@ class BffApplicationTests {
 	@MockitoBean
 	private NimbusJwtDecoder jwtDecoder;
 
+	@MockitoBean
+	private NimbusJwtDecoder idTokenDecoder;
+
 	@Test
 	void contextLoads() {
 	}
