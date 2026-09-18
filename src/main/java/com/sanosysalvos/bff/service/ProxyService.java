@@ -4,6 +4,7 @@ import java.util.Collections;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod; // ← CORRECTO
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -32,8 +33,14 @@ public class ProxyService {
                     .status(202).header("Retry-After", "2").body("Solicitud en cola, reintenta en 2 segundos"
                             .getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
-        String rutaDestino = request.getRequestURI().substring("/api/v1".length());
-        String urlDestino = "http://" + nombreEnEureka + rutaDestino; /* arma la URL completa al microservicio */
+        // ###################################
+        /* ms-mascotas (y en general los MS) sirven bajo /api/v1 tambien, asi que NO se
+         * saca el prefijo al reenviar; de paso se preservan los query params (filtros) */
+        String urlDestino = "http://" + nombreEnEureka + request.getRequestURI();
+        if (request.getQueryString() != null) {
+            urlDestino += "?" + request.getQueryString();
+        }
+        // ###################################
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
 
@@ -54,12 +61,20 @@ public class ProxyService {
         }
         // ###################################
 
-        ResponseEntity<byte[]> respuesta = restClient.method(httpMethod)
+        // ###################################
+        /* .body(null) explota (NPE) en peticiones sin body como GET/DELETE; solo se agrega si existe */
+        RestClient.RequestBodySpec requestSpec = restClient.method(httpMethod)
                 .uri(urlDestino)
-                .headers(h -> h.addAll(headers)) /* pasa todos los headers incluyendo Authorization */
-                .body(body)
+                .headers(h -> h.addAll(headers)); /* pasa todos los headers incluyendo Authorization */
+
+        ResponseEntity<byte[]> respuesta = (body != null ? requestSpec.body(body) : requestSpec)
                 .retrieve()// ejecuta la llamada http para obtener(get) la respuesta del microservicio destino
+                /* por defecto retrieve() lanza excepcion en 4xx/5xx; se desactiva para que el
+                 * bff reenvie tal cual el error del microservicio, en vez de romper con un 500
+                 * propio que además cae en /error (no publico) y confunde con un 401 */
+                .onStatus(HttpStatusCode::isError, (req, res) -> {})
                 .toEntity(byte[].class);
+        // ###################################
 
         return respuesta;
     }
@@ -67,7 +82,10 @@ public class ProxyService {
     /* verifica si el microservicio destino está disponible consultando su health */
     private boolean estaDisponible(String nombreEnEureka) {
         try {
-            String url = "http://" + nombreEnEureka + "/actuator/health";
+            // ###################################
+            /* los microservicios exponen todo bajo /api/v1 (servlet-path), el health incluido */
+            String url = "http://" + nombreEnEureka + "/api/v1/actuator/health";
+            // ###################################
             String respuesta = restClient.get() /* prepara la solicitud GET */
                     .uri(url) /* establece la URL destino */
                     .retrieve() /* ejecuta la solicitud */

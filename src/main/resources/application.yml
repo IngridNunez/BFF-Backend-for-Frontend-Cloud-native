@@ -20,9 +20,10 @@ eureka:
 
 servicios: #configuración de los servicios
   rutas:
-    mascotas: ms-mascotas #ruta/mascotas ->nombre en eureka
-    alertas: ms-alertas #ruta/alertas ->nombre en eureka
+    mascotas: ms-mascotas:8082 #ruta/mascotas ->nombre en eureka (puerto explicito: en docker el contenedor no escucha en :80)
+    alertas: ms-alertas:8083 #ruta/alertas ->nombre en eureka (puerto explicito, mismo motivo que mascotas)
     usuarios: ms-usuarios #ruta/usuarios ->nombre en eureka
+    contactos: ms-alertas:8083 #ruta/contactos -> mismo microservicio que alertas ###################################
 
 
 bff:
