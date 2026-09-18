@@ -26,12 +26,10 @@ public class SecurityConfig {
     @Bean /* configura que rutas son publicas y cuales requieren autenticacion y en que orden se ejecutan los filtros */
     public SecurityFilterChain securityFilterChain(HttpSecurity http, NimbusJwtDecoder jwtDecoder) throws Exception {
         http
-            // ###################################
             // API stateless (JWT via Authorization/X-Id-Token, sin cookies de sesion):
             // CSRF es un concepto de sesiones basadas en cookies, no aplica aca.
             // Sin esto, cualquier POST/PATCH/DELETE (incluidas las rutas publicas) da 403.
             .csrf(csrf -> csrf.disable())
-            // ###################################
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health").permitAll()
@@ -48,7 +46,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ###################################
     /* permite que el frontend (localhost:5173 en dev) llame al bff desde el navegador */
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -61,5 +58,4 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", config);
         return source;
     }
-    // ###################################
 }

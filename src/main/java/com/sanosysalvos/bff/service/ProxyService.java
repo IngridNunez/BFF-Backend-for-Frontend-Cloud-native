@@ -33,14 +33,12 @@ public class ProxyService {
                     .status(202).header("Retry-After", "2").body("Solicitud en cola, reintenta en 2 segundos"
                             .getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
-        // ###################################
         /* ms-mascotas (y en general los MS) sirven bajo /api/v1 tambien, asi que NO se
          * saca el prefijo al reenviar; de paso se preservan los query params (filtros) */
         String urlDestino = "http://" + nombreEnEureka + request.getRequestURI();
         if (request.getQueryString() != null) {
             urlDestino += "?" + request.getQueryString();
         }
-        // ###################################
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
 
@@ -53,15 +51,12 @@ public class ProxyService {
         if (userId != null) {
             headers.add("X-User-Id", userId);
         }
-        // ###################################
         /* agregar el correo extraido del id token como header (ms-mascotas guarda el correo del dueño) */
         String userEmail = (String) request.getAttribute("X-User-Email");
         if (userEmail != null) {
             headers.add("X-User-Email", userEmail);
         }
-        // ###################################
 
-        // ###################################
         /* .body(null) explota (NPE) en peticiones sin body como GET/DELETE; solo se agrega si existe */
         RestClient.RequestBodySpec requestSpec = restClient.method(httpMethod)
                 .uri(urlDestino)
@@ -74,7 +69,6 @@ public class ProxyService {
                  * propio que además cae en /error (no publico) y confunde con un 401 */
                 .onStatus(HttpStatusCode::isError, (req, res) -> {})
                 .toEntity(byte[].class);
-        // ###################################
 
         return respuesta;
     }
@@ -82,10 +76,8 @@ public class ProxyService {
     /* verifica si el microservicio destino está disponible consultando su health */
     private boolean estaDisponible(String nombreEnEureka) {
         try {
-            // ###################################
             /* los microservicios exponen todo bajo /api/v1 (servlet-path), el health incluido */
             String url = "http://" + nombreEnEureka + "/api/v1/actuator/health";
-            // ###################################
             String respuesta = restClient.get() /* prepara la solicitud GET */
                     .uri(url) /* establece la URL destino */
                     .retrieve() /* ejecuta la solicitud */

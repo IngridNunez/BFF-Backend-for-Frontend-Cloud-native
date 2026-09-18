@@ -1,36 +1,9 @@
+# Reducido (18-sep-2026): mismo patrón que ms-mascotas y ms-alertas — el
+# application.yml local queda solo con spring.application.name + spring.config.import,
+# TODO lo demás (cognito, jwt, puerto, rutas de servicios, retry-after) vive en
+# sanos-y-salvos-config_server/config/bff.yml.
 spring:
   application:
-    name: bff #nombre con que mi bff se comunica con eruka
+    name: bff
   config:
-    import: optional:configserver:http://localhost:8888 #opcional por ahora el config server
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: https://cognito-idp.${cognito.region}.amazonaws.com/${cognito.user-pool-id}/.well-known/jwks.json
-          issuer-uri: https://cognito-idp.${cognito.region}.amazonaws.com/${cognito.user-pool-id}
-server:
-  port: 8081 #puerto del bff
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka/ #url del eureka
-
-servicios: #configuración de los servicios
-  rutas:
-    mascotas: ms-mascotas:8082 #ruta/mascotas ->nombre en eureka (puerto explicito: en docker el contenedor no escucha en :80)
-    alertas: ms-alertas:8083 #ruta/alertas ->nombre en eureka (puerto explicito, mismo motivo que mascotas)
-    usuarios: ms-usuarios #ruta/usuarios ->nombre en eureka
-    contactos: ms-alertas:8083 #ruta/contactos -> mismo microservicio que alertas ###################################
-
-
-bff:
-  retry-after: 5 #tiempo de espera para reintentar la solicitud
-
-cognito:
-  region: us-east-1 #región de cognito
-  user-pool-id: ${COGNITO_USER_POOL_ID} #id del user pool de cognito
-  client-id: ${COGNITO_CLIENT_ID} #id del cliente de cognito
-
+    import: optional:configserver:http://localhost:8888
