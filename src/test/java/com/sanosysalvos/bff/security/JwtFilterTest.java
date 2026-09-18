@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class JwtFilterTest {
 
     @Mock
-    private JwtDecoder jwtDecoder;
+    private JwtDecoder idTokenDecoder;
 
     @Mock
     private HttpServletRequest request;
@@ -63,18 +63,18 @@ class JwtFilterTest {
 
     @Test
     void doFilter_sinAutenticacionEnContexto_dejaPasarSinValidarTokens() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain, times(1)).doFilter(request, response);
         verifyNoInteractions(response);
-        verifyNoInteractions(jwtDecoder);
+        verifyNoInteractions(idTokenDecoder);
     }
 
     @Test
     void doFilter_autenticacionAnonima_dejaPasarSinValidarTokens() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         SecurityContextHolder.getContext().setAuthentication(
                 new AnonymousAuthenticationToken("key", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
 
@@ -82,12 +82,12 @@ class JwtFilterTest {
 
         verify(filterChain, times(1)).doFilter(request, response);
         verifyNoInteractions(response);
-        verifyNoInteractions(jwtDecoder);
+        verifyNoInteractions(idTokenDecoder);
     }
 
     @Test
     void doFilter_sinHeaderXIdToken_devuelve401YNoContinua() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         when(request.getHeader("X-Id-Token")).thenReturn(null);
 
@@ -99,7 +99,7 @@ class JwtFilterTest {
 
     @Test
     void doFilter_headerXIdTokenSinPrefijoBearer_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         when(request.getHeader("X-Id-Token")).thenReturn("id-token-sin-bearer");
 
@@ -111,7 +111,7 @@ class JwtFilterTest {
 
     @Test
     void doFilter_sinRefreshToken_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
         when(request.getHeader("X-Refresh-Token")).thenReturn(null);
@@ -124,7 +124,7 @@ class JwtFilterTest {
 
     @Test
     void doFilter_refreshTokenEnBlanco_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
         when(request.getHeader("X-Refresh-Token")).thenReturn("   ");
@@ -137,11 +137,11 @@ class JwtFilterTest {
 
     @Test
     void doFilter_idTokenInvalido_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
         when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
-        when(jwtDecoder.decode("id-token")).thenThrow(new RuntimeException("firma inválida"));
+        when(idTokenDecoder.decode("id-token")).thenThrow(new RuntimeException("firma inválida"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
@@ -151,10 +151,10 @@ class JwtFilterTest {
 
     @Test
     void doFilter_subsNoCoinciden_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
         when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
-        when(jwtDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-token"));
+        when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-token"));
         autenticarComo(jwtConSubject("usuario-access-token"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
@@ -166,10 +166,10 @@ class JwtFilterTest {
 
     @Test
     void doFilter_tokensValidosYSubsCoinciden_dejaPasarYPropagaXUserId() throws Exception {
-        jwtFilter = new JwtFilter(jwtDecoder);
+        jwtFilter = new JwtFilter(idTokenDecoder);
         when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
         when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
-        when(jwtDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-1"));
+        when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-1"));
         autenticarComo(jwtConSubject("usuario-1"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);

@@ -19,7 +19,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
 
-    private final JwtDecoder jwtDecoder; /* decoder de Spring Security, ya tiene las claves de Cognito */
+    private final JwtDecoder idTokenDecoder; /* decoder específico para el X-Id-Token (no exige token_use=access) */
 
     @Override
     protected void doFilterInternal(
@@ -51,7 +51,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
         try {
             /* validar el id token usando el decoder de Spring Security */
-            Jwt idToken = jwtDecoder.decode(idTokenString);
+            Jwt idToken = idTokenDecoder.decode(idTokenString);
 
             /*
              * obtener el sub del access token ya validado por Spring Security , el sub es
@@ -69,6 +69,14 @@ public class JwtFilter extends OncePerRequestFilter {
 
             /* pasar el sub como atributo para los microservicios */
             request.setAttribute("X-User-Id", accessSub);
+
+            // ###################################
+            /* pasar el correo del id token como atributo para los microservicios (ms-mascotas lo usa como dato de usuario) */
+            String email = idToken.getClaimAsString("email");
+            if (email != null) {
+                request.setAttribute("X-User-Email", email);
+            }
+            // ###################################
 
             /* todo válido, dejar pasar */
             filterChain.doFilter(request, response);

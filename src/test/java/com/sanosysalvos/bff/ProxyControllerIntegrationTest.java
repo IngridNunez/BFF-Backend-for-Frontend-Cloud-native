@@ -38,6 +38,9 @@ class ProxyControllerIntegrationTest {
     @MockitoBean
     private NimbusJwtDecoder jwtDecoder;
 
+    @MockitoBean
+    private NimbusJwtDecoder idTokenDecoder;
+
     private Jwt jwtConSubject(String subject) {
         return Jwt.withTokenValue("token-" + subject)
                 .header("alg", "none")
@@ -60,6 +63,7 @@ class ProxyControllerIntegrationTest {
     @Test
     void rutaProtegida_conTokensValidosYSubsCoincidentes_llegaAlProxyServiceYDevuelve200() throws Exception {
         when(jwtDecoder.decode(any())).thenReturn(jwtConSubject("usuario-1"));
+        when(idTokenDecoder.decode(any())).thenReturn(jwtConSubject("usuario-1"));
         when(proxyService.proxy(any(HttpServletRequest.class), any()))
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
 
@@ -82,7 +86,7 @@ class ProxyControllerIntegrationTest {
     @Test
     void rutaProtegida_conTokensQueNoCoincidenEnSub_devuelve401() throws Exception {
         when(jwtDecoder.decode("access-token")).thenReturn(jwtConSubject("usuario-access"));
-        when(jwtDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-distinto"));
+        when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-distinto"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
                         .header("Authorization", "Bearer access-token")
