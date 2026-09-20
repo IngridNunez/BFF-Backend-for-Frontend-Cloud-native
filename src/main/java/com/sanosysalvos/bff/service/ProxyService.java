@@ -33,7 +33,9 @@ public class ProxyService {
                             .getBytes()); /* si no está disponible, devuelve 202 con retry-after */
         }
         String rutaDestino = request.getRequestURI().substring("/api/v1".length());
-        String urlDestino = "http://" + nombreEnEureka + rutaDestino; /* arma la URL completa al microservicio */
+        String queryString = request.getQueryString();
+        String urlDestino = "http://" + nombreEnEureka + rutaDestino
+                + (queryString != null ? "?" + queryString : ""); /* arma la URL completa al microservicio, con query params si los hay */
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
 
@@ -54,14 +56,21 @@ public class ProxyService {
         }
         // ###################################
 
-        ResponseEntity<byte[]> respuesta = restClient.method(httpMethod)
+        RestClient.RequestBodySpec requestSpec = restClient.method(httpMethod)
                 .uri(urlDestino)
-                .headers(h -> h.addAll(headers)) /* pasa todos los headers incluyendo Authorization */
-                .body(body)
-                .retrieve()// ejecuta la llamada http para obtener(get) la respuesta del microservicio destino
-                .toEntity(byte[].class);
+                .headers(h -> h.addAll(headers)); /* pasa todos los headers incluyendo Authorization */
 
-        return respuesta;
+        /* GET/DELETE no traen body — pasar null a .body() explota con NPE
+         * (intenta leer body.getClass()), así que solo se llama si hay algo */
+        RestClient.ResponseSpec responseSpec = (body != null ? requestSpec.body(body) : requestSpec)
+                .retrieve()
+                /* sin esto, un 4xx/5xx del microservicio hace que RestClient
+                 * lance una excepción acá y el bff termine devolviendo un 500
+                 * genérico (y, por el forward interno a /error, hasta un 401)
+                 * en vez de reenviar el error real tal cual */
+                .onStatus(status -> true, (req, res) -> { });
+
+        return responseSpec.toEntity(byte[].class);
     }
 
     /* verifica si el microservicio destino está disponible consultando su health */
