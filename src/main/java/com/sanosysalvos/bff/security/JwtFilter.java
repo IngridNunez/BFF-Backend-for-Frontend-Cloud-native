@@ -70,13 +70,11 @@ public class JwtFilter extends OncePerRequestFilter {
             /* pasar el sub como atributo para los microservicios */
             request.setAttribute("X-User-Id", accessSub);
 
-            // ###################################
             /* pasar el correo del id token como atributo para los microservicios (ms-mascotas lo usa como dato de usuario) */
             String email = idToken.getClaimAsString("email");
             if (email != null) {
                 request.setAttribute("X-User-Email", email);
             }
-            // ###################################
 
             /* todo válido, dejar pasar */
             filterChain.doFilter(request, response);
