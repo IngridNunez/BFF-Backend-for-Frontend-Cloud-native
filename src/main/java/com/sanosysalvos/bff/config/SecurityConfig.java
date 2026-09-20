@@ -21,10 +21,17 @@ public class SecurityConfig {
     @Bean /* configura que rutas son publicas y cuales requieren autenticacion y en que orden se ejecutan los filtros */
     public SecurityFilterChain securityFilterChain(HttpSecurity http, NimbusJwtDecoder jwtDecoder) throws Exception {
         http
+            // API stateless con JWT, no con sesiones/cookies — CSRF no aplica.
+            // Sin esto, POST/PATCH/DELETE anónimos (ej. /contactos) quedan
+            // bloqueados por CSRF y Spring Security lo reporta como 401 (no
+            // 403) porque para un cliente no autenticado un AccessDenied se
+            // traduce en "requiere autenticación".
+            .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/mascotas", "/api/v1/mascotas/**").permitAll() /* listado y detalle público */
-                .requestMatchers(HttpMethod.GET, "/api/v1/alertas/zona").permitAll() /* búsqueda de alertas pública */
+                .requestMatchers(HttpMethod.GET, "/api/v1/mascotas").permitAll() /* listado y detalle público */
+                .requestMatchers(HttpMethod.GET, "/api/v1/alertas/zona", "/api/v1/alertas/zona/**").permitAll() /* búsqueda de alertas pública */
+                .requestMatchers(HttpMethod.POST, "/api/v1/contactos", "/api/v1/contactos/**").permitAll() /* avisar sobre una mascota no requiere cuenta */
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2 /* configura el servidor de recursos OAuth2 para usar JWT */
