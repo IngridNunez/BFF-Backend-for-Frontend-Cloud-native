@@ -70,18 +70,16 @@ class ProxyControllerIntegrationTest {
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .header("Cookie", "access_token=access-token; id_token=id-token; refresh_token=refresh-token"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void rutaProtegida_conAuthorizationPeroSinIdToken_devuelve401() throws Exception {
+    void rutaProtegida_conAccessTokenPeroSinIdToken_devuelve401() throws Exception {
         when(jwtDecoder.decode(any())).thenReturn(jwtConSubject("usuario-1"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token"))
+                        .header("Cookie", "access_token=access-token"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -91,9 +89,7 @@ class ProxyControllerIntegrationTest {
         when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-distinto"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .header("Cookie", "access_token=access-token; id_token=id-token; refresh_token=refresh-token"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(proxyService);

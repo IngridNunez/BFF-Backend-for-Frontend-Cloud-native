@@ -1,5 +1,6 @@
 package com.sanosysalvos.bff.security;
 
+import com.sanosysalvos.bff.util.CookieUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.stereotype.Component;
@@ -19,6 +22,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtFilter.class);
     private final JwtDecoder idTokenDecoder; /* decoder específico para el X-Id-Token (no exige token_use=access) */
 
     @Override
@@ -30,21 +34,24 @@ public class JwtFilter extends OncePerRequestFilter {
         /* si la ruta es pública (permitAll) y no llegó ningún access token, no hay nada que validar aquí */
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
+            log.info("Sin autenticacion (anonima o nula) para {} {} - cookie header crudo: {}",
+                    request.getMethod(), request.getRequestURI(), request.getHeader("Cookie"));
             filterChain.doFilter(request, response);
             return;
         }
 
-        /* extraer el id token (sub) */
-        String idTokenHeader = request.getHeader("X-Id-Token");
-        if (idTokenHeader == null || !idTokenHeader.startsWith("Bearer ")) {
+        /* extraer el id token de la cookie httpOnly (antes viajaba en el header X-Id-Token) */
+        String idTokenString = CookieUtil.leerCookie(request, "id_token");
+        if (idTokenString == null || idTokenString.isBlank()) {
+            log.error("Id token no proporcionado. Cookie header crudo: {}", request.getHeader("Cookie"));
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token no proporcionado");
             return;
         }
-        String idTokenString = idTokenHeader.substring(7);
 
-        /* verificar que el refresh token existe y no está vacío */
-        String refreshToken = request.getHeader("X-Refresh-Token");
+        /* verificar que el refresh token existe y no está vacío (antes viajaba en X-Refresh-Token) */
+        String refreshToken = CookieUtil.leerCookie(request, "refresh_token");
         if (refreshToken == null || refreshToken.isBlank()) {
+            log.error("Refresh token no proporcionado. Cookie header crudo: {}", request.getHeader("Cookie"));
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
             return;
         }
@@ -63,6 +70,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
             /* verificar que el sub coincida en ambos tokens */
             if (!accessSub.equals(idToken.getSubject())) {
+                log.error("Los subs no coinciden: access={} id={}", accessSub, idToken.getSubject());
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Tokens no coinciden");
                 return;
             }
@@ -80,6 +88,7 @@ public class JwtFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
 
         } catch (Exception e) {
+            log.error("Id token invalido", e);
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token inválido");
         }
     }
