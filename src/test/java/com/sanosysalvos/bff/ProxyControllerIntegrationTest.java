@@ -1,6 +1,7 @@
 package com.sanosysalvos.bff;
 
 import com.sanosysalvos.bff.service.ProxyService;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,18 +69,18 @@ class ProxyControllerIntegrationTest {
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .cookie(new Cookie("access_token", "access-token"),
+                                new Cookie("id_token", "id-token"),
+                                new Cookie("refresh_token", "refresh-token")))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void rutaProtegida_conAuthorizationPeroSinIdToken_devuelve401() throws Exception {
+    void rutaProtegida_conAccessTokenPeroSinIdToken_devuelve401() throws Exception {
         when(jwtDecoder.decode(any())).thenReturn(jwtConSubject("usuario-1"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token"))
+                        .cookie(new Cookie("access_token", "access-token")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -89,9 +90,9 @@ class ProxyControllerIntegrationTest {
         when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-distinto"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .cookie(new Cookie("access_token", "access-token"),
+                                new Cookie("id_token", "id-token"),
+                                new Cookie("refresh_token", "refresh-token")))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(proxyService);

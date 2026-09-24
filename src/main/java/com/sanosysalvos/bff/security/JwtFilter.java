@@ -1,5 +1,6 @@
 package com.sanosysalvos.bff.security;
 
+import com.sanosysalvos.bff.util.CookieUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,16 +35,15 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        /* extraer el id token (sub) */
-        String idTokenHeader = request.getHeader("X-Id-Token");
-        if (idTokenHeader == null || !idTokenHeader.startsWith("Bearer ")) {
+        /* extraer el id token de la cookie httpOnly (antes viajaba en el header X-Id-Token) */
+        String idTokenString = CookieUtil.leerCookie(request, "id_token");
+        if (idTokenString == null || idTokenString.isBlank()) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token no proporcionado");
             return;
         }
-        String idTokenString = idTokenHeader.substring(7);
 
-        /* verificar que el refresh token existe y no está vacío */
-        String refreshToken = request.getHeader("X-Refresh-Token");
+        /* verificar que el refresh token existe y no está vacío (antes viajaba en X-Refresh-Token) */
+        String refreshToken = CookieUtil.leerCookie(request, "refresh_token");
         if (refreshToken == null || refreshToken.isBlank()) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
             return;

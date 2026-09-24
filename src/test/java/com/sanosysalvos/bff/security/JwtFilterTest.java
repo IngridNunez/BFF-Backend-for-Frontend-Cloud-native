@@ -1,6 +1,7 @@
 package com.sanosysalvos.bff.security;
 
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -61,6 +62,10 @@ class JwtFilterTest {
                 .setAuthentication(new TestingAuthenticationToken(accessJwt, null));
     }
 
+    private void conCookies(Cookie... cookies) {
+        when(request.getCookies()).thenReturn(cookies);
+    }
+
     @Test
     void doFilter_sinAutenticacionEnContexto_dejaPasarSinValidarTokens() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
@@ -86,22 +91,10 @@ class JwtFilterTest {
     }
 
     @Test
-    void doFilter_sinHeaderXIdToken_devuelve401YNoContinua() throws Exception {
+    void doFilter_sinCookieIdToken_devuelve401YNoContinua() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
-        when(request.getHeader("X-Id-Token")).thenReturn(null);
-
-        jwtFilter.doFilterInternal(request, response, filterChain);
-
-        verify(response).sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token no proporcionado");
-        verifyNoInteractions(filterChain);
-    }
-
-    @Test
-    void doFilter_headerXIdTokenSinPrefijoBearer_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(idTokenDecoder);
-        autenticarComo(jwtConSubject("usuario-1"));
-        when(request.getHeader("X-Id-Token")).thenReturn("id-token-sin-bearer");
+        conCookies();
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
@@ -113,8 +106,7 @@ class JwtFilterTest {
     void doFilter_sinRefreshToken_devuelve401() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
-        when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
-        when(request.getHeader("X-Refresh-Token")).thenReturn(null);
+        conCookies(new Cookie("id_token", "id-token"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
@@ -126,8 +118,7 @@ class JwtFilterTest {
     void doFilter_refreshTokenEnBlanco_devuelve401() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
-        when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
-        when(request.getHeader("X-Refresh-Token")).thenReturn("   ");
+        conCookies(new Cookie("id_token", "id-token"), new Cookie("refresh_token", "   "));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
@@ -139,8 +130,7 @@ class JwtFilterTest {
     void doFilter_idTokenInvalido_devuelve401() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
-        when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
-        when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
+        conCookies(new Cookie("id_token", "id-token"), new Cookie("refresh_token", "refresh-token"));
         when(idTokenDecoder.decode("id-token")).thenThrow(new RuntimeException("firma inválida"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
@@ -152,8 +142,7 @@ class JwtFilterTest {
     @Test
     void doFilter_subsNoCoinciden_devuelve401() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
-        when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
-        when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
+        conCookies(new Cookie("id_token", "id-token"), new Cookie("refresh_token", "refresh-token"));
         when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-token"));
         autenticarComo(jwtConSubject("usuario-access-token"));
 
@@ -167,8 +156,7 @@ class JwtFilterTest {
     @Test
     void doFilter_tokensValidosYSubsCoinciden_dejaPasarYPropagaXUserId() throws Exception {
         jwtFilter = new JwtFilter(idTokenDecoder);
-        when(request.getHeader("X-Id-Token")).thenReturn("Bearer id-token");
-        when(request.getHeader("X-Refresh-Token")).thenReturn("refresh-token");
+        conCookies(new Cookie("id_token", "id-token"), new Cookie("refresh_token", "refresh-token"));
         when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-1"));
         autenticarComo(jwtConSubject("usuario-1"));
 
