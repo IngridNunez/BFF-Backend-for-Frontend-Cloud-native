@@ -70,6 +70,15 @@ class ProxyServiceTest {
         return request;
     }
 
+    private HttpServletRequest mockRequestConQuery(String uri, String query) {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn(uri);
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getQueryString()).thenReturn(query);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(java.util.List.of()));
+        return request;
+    }
+
     private HttpServletRequest mockRequestSoloUri(String uri) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getRequestURI()).thenReturn(uri);
@@ -177,6 +186,60 @@ class ProxyServiceTest {
         captor.getValue().accept(headers);
 
         assertThat(headers.get("X-User-Id")).isNull();
+    }
+
+    @Test
+    void proxy_conBodyNulo_noLanzaNpeYNoLlamaBody() {
+        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
+        mockServicioDisponible(true);
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+        ResponseEntity<byte[]> respuestaEsperada = ResponseEntity.ok("mascotas".getBytes());
+
+        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.toEntity(byte[].class)).thenReturn(respuestaEsperada);
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(mockRequest("/api/v1/mascotas", "GET", null), null);
+
+        assertThat(respuesta).isSameAs(respuestaEsperada);
+        verify(requestBodySpec, org.mockito.Mockito.never()).body(any(byte[].class));
+    }
+
+    @Test
+    void proxy_conQueryString_laIncluyeEnLaUrlDestino() {
+        when(serviciosProperties.getRutas()).thenReturn(Map.of("alertas", "ms-alertas"));
+        mockServicioDisponible(true);
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
+
+        proxyService.proxy(mockRequestConQuery("/api/v1/alertas/zona", "lat=1&lng=2&radioKm=3"), null);
+
+        verify(requestBodyUriSpec).uri("http://ms-alertas/api/v1/alertas/zona?lat=1&lng=2&radioKm=3");
+    }
+
+    @Test
+    void proxy_consultaElHealthBajoApiV1() {
+        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
+        mockServicioDisponible(false);
+
+        proxyService.proxy(mockRequestSoloUri("/api/v1/mascotas"), null);
+
+        verify(healthUriSpec).uri("http://ms-mascotas/api/v1/actuator/health");
     }
 
     @Test
