@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import com.sanosysalvos.bff.config.ServiciosProperties;
+import com.sanosysalvos.bff.util.CookieUtil;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -42,10 +43,20 @@ public class ProxyService {
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
 
-        /* copiar headers de la petición original para que el JWT llegue a los MS */
+        /* copiar headers de la petición original */
         HttpHeaders headers = new HttpHeaders();
         Collections.list(request.getHeaderNames())
                 .forEach(name -> headers.add(name, request.getHeader(name)));
+
+        /* el access token ahora viaja en la cookie httpOnly, no en el header
+         * Authorization - pero ms-mascotas y ms-alertas validan su propio JWT
+         * esperando ese header (arquitectura de "cada MS valida su token"),
+         * asi que hay que reconstruirlo acá a partir de la cookie */
+        String accessToken = CookieUtil.leerCookie(request, "access_token");
+        if (accessToken != null) {
+            headers.set("Authorization", "Bearer " + accessToken);
+        }
+
         /* agregar el sub extraido del JWT como header para los microservicios */
         String userId = (String) request.getAttribute("X-User-Id");
         if (userId != null) {

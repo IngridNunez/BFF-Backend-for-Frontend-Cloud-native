@@ -6,6 +6,8 @@ import com.sanosysalvos.bff.util.CookieUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -28,36 +30,40 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private static final Duration DURACION_REFRESH_TOKEN = Duration.ofDays(30); /* default de Cognito para el refresh token */
 
     private final JwtDecoder jwtDecoder; /* valida access token (token_use=access) */
     private final JwtDecoder idTokenDecoder; /* valida id token (token_use=id) */
 
     @PostMapping("/session")
-    public ResponseEntity<Void> iniciarSesion(@RequestBody SesionRequestDto dto, HttpServletResponse response) {
+    public ResponseEntity<Void> iniciarSesion(@RequestBody SesionRequestDto dto, HttpServletRequest request, HttpServletResponse response) {
         Jwt accessToken;
         Jwt idToken;
         try {
             accessToken = jwtDecoder.decode(dto.getAccessToken());
             idToken = idTokenDecoder.decode(dto.getIdToken());
         } catch (JwtException e) {
+            log.error("Token invalido al iniciar sesion", e);
             return ResponseEntity.status(401).build();
         }
 
         if (!accessToken.getSubject().equals(idToken.getSubject())) {
+            log.error("Los subs de access token e id token no coinciden: {} vs {}", accessToken.getSubject(), idToken.getSubject());
             return ResponseEntity.status(401).build();
         }
 
         Duration duracionAccessToken = Duration.between(Instant.now(), accessToken.getExpiresAt());
         Duration duracionIdToken = Duration.between(Instant.now(), idToken.getExpiresAt());
 
-        CookieUtil.setCookie(response, "access_token", dto.getAccessToken(), duracionAccessToken);
-        CookieUtil.setCookie(response, "id_token", dto.getIdToken(), duracionIdToken);
-        CookieUtil.setCookie(response, "refresh_token", dto.getRefreshToken(), DURACION_REFRESH_TOKEN);
+        boolean secure = request.isSecure(); /* en dev local todo es http; en produccion (https) esto sera true */
+        CookieUtil.setCookie(response, "access_token", dto.getAccessToken(), duracionAccessToken, secure);
+        CookieUtil.setCookie(response, "id_token", dto.getIdToken(), duracionIdToken, secure);
+        CookieUtil.setCookie(response, "refresh_token", dto.getRefreshToken(), DURACION_REFRESH_TOKEN, secure);
 
         return ResponseEntity.noContent().build();
     }
-
+    // metodo para obtener la informacion del usuario logueado, usando el id_token de la cookie
     @GetMapping("/me")
     public ResponseEntity<UsuarioSesionDto> quienSoy(HttpServletRequest request) {
         String idTokenCookie = CookieUtil.leerCookie(request, "id_token");
@@ -73,12 +79,13 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
     }
-
+    // metodo para cerrar la sesion, eliminando las cookies
     @PostMapping("/logout")
-    public ResponseEntity<Void> cerrarSesion(HttpServletResponse response) {
-        CookieUtil.clearCookie(response, "access_token");
-        CookieUtil.clearCookie(response, "id_token");
-        CookieUtil.clearCookie(response, "refresh_token");
+    public ResponseEntity<Void> cerrarSesion(HttpServletRequest request, HttpServletResponse response) {
+        boolean secure = request.isSecure();
+        CookieUtil.clearCookie(response, "access_token", secure);
+        CookieUtil.clearCookie(response, "id_token", secure);
+        CookieUtil.clearCookie(response, "refresh_token", secure);
         return ResponseEntity.noContent().build();
     }
 }

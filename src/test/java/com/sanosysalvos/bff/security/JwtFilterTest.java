@@ -62,8 +62,14 @@ class JwtFilterTest {
                 .setAuthentication(new TestingAuthenticationToken(accessJwt, null));
     }
 
+    /* CookieUtil.leerCookie ahora lee el header Cookie crudo (ver comentario en esa clase:
+     * el parser estricto de Tomcat 11 descarta el header completo si hay una cookie de
+     * terceros con formato invalido), asi que el mock simula ese header en vez de getCookies() */
     private void conCookies(Cookie... cookies) {
-        when(request.getCookies()).thenReturn(cookies);
+        String header = java.util.Arrays.stream(cookies)
+                .map(c -> c.getName() + "=" + c.getValue())
+                .collect(java.util.stream.Collectors.joining("; "));
+        when(request.getHeader("Cookie")).thenReturn(header);
     }
 
     @Test
