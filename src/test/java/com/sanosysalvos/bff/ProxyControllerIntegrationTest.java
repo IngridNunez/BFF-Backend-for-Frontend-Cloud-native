@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -18,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /*
@@ -68,18 +70,16 @@ class ProxyControllerIntegrationTest {
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .header("Cookie", "access_token=access-token; id_token=id-token; refresh_token=refresh-token"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void rutaProtegida_conAuthorizationPeroSinIdToken_devuelve401() throws Exception {
+    void rutaProtegida_conAccessTokenPeroSinIdToken_devuelve401() throws Exception {
         when(jwtDecoder.decode(any())).thenReturn(jwtConSubject("usuario-1"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token"))
+                        .header("Cookie", "access_token=access-token"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -89,9 +89,7 @@ class ProxyControllerIntegrationTest {
         when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-id-distinto"));
 
         mockMvc.perform(get("/api/v1/usuarios/me")
-                        .header("Authorization", "Bearer access-token")
-                        .header("X-Id-Token", "Bearer id-token")
-                        .header("X-Refresh-Token", "refresh-token"))
+                        .header("Cookie", "access_token=access-token; id_token=id-token; refresh_token=refresh-token"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(proxyService);
@@ -115,6 +113,29 @@ class ProxyControllerIntegrationTest {
 
         mockMvc.perform(get("/api/v1/alertas/zona"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void rutaPublicaContactos_sinNingunToken_llegaAlProxyServiceYDevuelve200() throws Exception {
+        when(proxyService.proxy(any(HttpServletRequest.class), any()))
+                .thenReturn(ResponseEntity.ok("ok".getBytes()));
+
+        mockMvc.perform(post("/api/v1/contactos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(jwtDecoder);
+    }
+
+    @Test
+    void rutaProtegida_postSinAuthorization_devuelve401() throws Exception {
+        mockMvc.perform(post("/api/v1/mascotas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(proxyService);
     }
 
     @Test
