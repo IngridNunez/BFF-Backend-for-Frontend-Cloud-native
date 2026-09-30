@@ -3,6 +3,7 @@ package com.sanosysalvos.bff.config;
 import com.sanosysalvos.bff.security.CookieBearerTokenResolver;
 import com.sanosysalvos.bff.security.CsrfHeaderFilter;
 import com.sanosysalvos.bff.security.JwtFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,9 +21,13 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
+    private final List<String> corsAllowedOrigins;
 
-    public SecurityConfig(JwtFilter jwtFilter) {
+    /* los orígenes permitidos se leen de CORS_ALLOWED_ORIGINS (separados por coma); en local queda localhost:5173 */
+    public SecurityConfig(JwtFilter jwtFilter,
+                          @Value("${CORS_ALLOWED_ORIGINS:http://localhost:5173}") List<String> corsAllowedOrigins) {
         this.jwtFilter = jwtFilter;
+        this.corsAllowedOrigins = corsAllowedOrigins;
     }
 
     @Bean /* configura que rutas son publicas y cuales requieren autenticacion y en que orden se ejecutan los filtros */
@@ -54,10 +59,10 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /* permite que el frontend (localhost:5173 en dev) llame al bff desde el navegador, mandando cookies */
+    /* permite que el frontend (localhost:5173 en dev, Vercel en producción) llame al bff desde el navegador, mandando cookies */
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOrigins(corsAllowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Content-Type", "X-Requested-With"));
         config.setAllowCredentials(true); /* necesario para que el navegador mande/reciba las cookies httpOnly */
