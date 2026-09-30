@@ -107,7 +107,9 @@ class ProxyServiceTest {
 
         ResponseEntity<byte[]> respuesta = proxyService.proxy(request, "body".getBytes());
 
-        assertThat(respuesta).isSameAs(respuestaEsperada);
+        /* el bff arma una respuesta nueva (sin headers hop-by-hop): se compara estado y body, no la instancia */
+        assertThat(respuesta.getStatusCode()).isEqualTo(respuestaEsperada.getStatusCode());
+        assertThat(respuesta.getBody()).isEqualTo(respuestaEsperada.getBody());
         verify(requestBodyUriSpec).uri("http://ms-mascotas/api/v1/mascotas");
     }
 
@@ -207,7 +209,9 @@ class ProxyServiceTest {
 
         ResponseEntity<byte[]> respuesta = proxyService.proxy(mockRequest("/api/v1/mascotas", "GET", null), null);
 
-        assertThat(respuesta).isSameAs(respuestaEsperada);
+        /* el bff arma una respuesta nueva (sin headers hop-by-hop): se compara estado y body, no la instancia */
+        assertThat(respuesta.getStatusCode()).isEqualTo(respuestaEsperada.getStatusCode());
+        assertThat(respuesta.getBody()).isEqualTo(respuestaEsperada.getBody());
         verify(requestBodySpec, org.mockito.Mockito.never()).body(any(byte[].class));
     }
 
@@ -264,5 +268,40 @@ class ProxyServiceTest {
         proxyService.proxy(request, new byte[0]);
 
         verify(requestBodyUriSpec).uri("http://ms-mascotas/api/v1/mascotas/123");
+    }
+
+    @Test
+    void proxy_quitaHeadersHopByHopDeLaRespuestaYMantieneLosDemas() {
+        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
+        mockServicioDisponible(true);
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        /* así responde ms-mascotas en /mascotas/presigned-url: chunked + connection close */
+        HttpHeaders headersMicroservicio = new HttpHeaders();
+        headersMicroservicio.add("Transfer-Encoding", "chunked");
+        headersMicroservicio.add("Connection", "close");
+        headersMicroservicio.add("Content-Type", "application/json");
+        ResponseEntity<byte[]> respuestaMicroservicio =
+                new ResponseEntity<>("{\"url\":\"x\"}".getBytes(), headersMicroservicio, org.springframework.http.HttpStatus.OK);
+
+        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.toEntity(byte[].class)).thenReturn(respuestaMicroservicio);
+
+        HttpServletRequest request = mockRequest("/api/v1/mascotas/presigned-url", "GET", "user-123");
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(request, null);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getHeaders().get("Transfer-Encoding")).isNull();
+        assertThat(respuesta.getHeaders().get("Connection")).isNull();
+        assertThat(respuesta.getHeaders().getFirst("Content-Type")).isEqualTo("application/json");
+        assertThat(new String(respuesta.getBody())).isEqualTo("{\"url\":\"x\"}");
     }
 }

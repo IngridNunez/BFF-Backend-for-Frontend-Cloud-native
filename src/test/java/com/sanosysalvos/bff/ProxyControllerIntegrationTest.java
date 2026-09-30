@@ -120,7 +120,9 @@ class ProxyControllerIntegrationTest {
         when(proxyService.proxy(any(HttpServletRequest.class), any()))
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
 
+        /* X-Requested-With: el CsrfHeaderFilter rechaza con 403 cualquier POST sin este header */
         mockMvc.perform(post("/api/v1/contactos")
+                        .header("X-Requested-With", "web")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk());
@@ -130,10 +132,22 @@ class ProxyControllerIntegrationTest {
 
     @Test
     void rutaProtegida_postSinAuthorization_devuelve401() throws Exception {
+        /* con el header anti-CSRF presente, lo que corta es la falta de sesión (401), no el CSRF (403) */
         mockMvc.perform(post("/api/v1/mascotas")
+                        .header("X-Requested-With", "web")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(proxyService);
+    }
+
+    @Test
+    void postSinHeaderAntiCsrf_devuelve403() throws Exception {
+        mockMvc.perform(post("/api/v1/contactos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(proxyService);
     }

@@ -1,6 +1,7 @@
 package com.sanosysalvos.bff.service;
 
 import java.util.Collections;
+import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod; // ← CORRECTO
@@ -21,6 +22,16 @@ public class ProxyService {
 
     private final ServiciosProperties serviciosProperties; /* propiedades de configuración de los servicios */
     private final RestClient restClient; /* cliente REST para hacer solicitudes HTTP */
+
+    /* headers "hop-by-hop" (RFC 9110): describen la conexión entre el microservicio
+     * y el bff, no entre el bff y el navegador, así que un proxy no debe reenviarlos.
+     * Content-Length también se saca porque Spring lo vuelve a calcular con el body real.
+     * Si se copiaban, una respuesta "Transfer-Encoding: chunked" del microservicio salía
+     * del bff con chunked + Content-Length a la vez; el ALB la descartaba (protección
+     * contra HTTP desync) y el navegador recibía 503 (pasaba con /mascotas/presigned-url). */
+    private static final Set<String> HEADERS_HOP_BY_HOP = Set.of(
+            "connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
+            "proxy-authenticate", "proxy-authorization", "content-length");
 
     /* método principal: recibe la solicitud y la reenvía al ms correspondiente */
     public ResponseEntity<byte[]> proxy(HttpServletRequest request, byte[] body) {
@@ -81,7 +92,15 @@ public class ProxyService {
                 .onStatus(HttpStatusCode::isError, (req, res) -> {})
                 .toEntity(byte[].class);
 
-        return respuesta;
+        /* se reenvían los headers del microservicio salvo los hop-by-hop (ver HEADERS_HOP_BY_HOP) */
+        HttpHeaders headersRespuesta = new HttpHeaders();
+        respuesta.getHeaders().forEach((nombre, valores) -> {
+            if (!HEADERS_HOP_BY_HOP.contains(nombre.toLowerCase())) {
+                headersRespuesta.put(nombre, valores);
+            }
+        });
+
+        return new ResponseEntity<>(respuesta.getBody(), headersRespuesta, respuesta.getStatusCode());
     }
 
     /* verifica si el microservicio destino está disponible consultando su health */
