@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -96,7 +97,7 @@ class ProxyServiceTest {
         ResponseEntity<byte[]> respuestaEsperada = ResponseEntity.ok("hola".getBytes());
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
@@ -110,7 +111,7 @@ class ProxyServiceTest {
         /* el bff arma una respuesta nueva (sin headers hop-by-hop): se compara estado y body, no la instancia */
         assertThat(respuesta.getStatusCode()).isEqualTo(respuestaEsperada.getStatusCode());
         assertThat(respuesta.getBody()).isEqualTo(respuestaEsperada.getBody());
-        verify(requestBodyUriSpec).uri("http://ms-mascotas/api/v1/mascotas");
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas/api/v1/mascotas"));
     }
 
     @Test
@@ -137,7 +138,7 @@ class ProxyServiceTest {
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
@@ -169,7 +170,7 @@ class ProxyServiceTest {
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
@@ -201,7 +202,7 @@ class ProxyServiceTest {
         ResponseEntity<byte[]> respuestaEsperada = ResponseEntity.ok("mascotas".getBytes());
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
@@ -225,7 +226,7 @@ class ProxyServiceTest {
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
@@ -233,7 +234,7 @@ class ProxyServiceTest {
 
         proxyService.proxy(mockRequestConQuery("/api/v1/alertas/zona", "lat=1&lng=2&radioKm=3"), null);
 
-        verify(requestBodyUriSpec).uri("http://ms-alertas/api/v1/alertas/zona?lat=1&lng=2&radioKm=3");
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-alertas/api/v1/alertas/zona?lat=1&lng=2&radioKm=3"));
     }
 
     @Test
@@ -256,7 +257,7 @@ class ProxyServiceTest {
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
@@ -267,7 +268,7 @@ class ProxyServiceTest {
 
         proxyService.proxy(request, new byte[0]);
 
-        verify(requestBodyUriSpec).uri("http://ms-mascotas/api/v1/mascotas/123");
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas/api/v1/mascotas/123"));
     }
 
     @Test
@@ -288,7 +289,7 @@ class ProxyServiceTest {
                 new ResponseEntity<>("{\"url\":\"x\"}".getBytes(), headersMicroservicio, org.springframework.http.HttpStatus.OK);
 
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
@@ -303,5 +304,30 @@ class ProxyServiceTest {
         assertThat(respuesta.getHeaders().get("Connection")).isNull();
         assertThat(respuesta.getHeaders().getFirst("Content-Type")).isEqualTo("application/json");
         assertThat(new String(respuesta.getBody())).isEqualTo("{\"url\":\"x\"}");
+    }
+
+    @Test
+    void proxy_noVuelveACodificarElQueryYaCodificado() {
+        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
+        mockServicioDisponible(true);
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
+        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
+
+        /* así llega desde el navegador: la "/" de image/jpeg viene como %2F */
+        proxyService.proxy(mockRequestConQuery("/api/v1/mascotas/presigned-url",
+                "fileName=foto.jpg&contentType=image%2Fjpeg&fileSize=1000"), null);
+
+        /* se reenvía igual, sin transformarse en %252F */
+        verify(requestBodyUriSpec).uri(URI.create(
+                "http://ms-mascotas/api/v1/mascotas/presigned-url?fileName=foto.jpg&contentType=image%2Fjpeg&fileSize=1000"));
     }
 }
