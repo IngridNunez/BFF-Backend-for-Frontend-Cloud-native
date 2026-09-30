@@ -34,8 +34,8 @@ public class JwtFilter extends OncePerRequestFilter {
         /* si la ruta es pública (permitAll) y no llegó ningún access token, no hay nada que validar aquí */
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
-            log.info("Sin autenticacion (anonima o nula) para {} {} - cookie header crudo: {}",
-                    request.getMethod(), request.getRequestURI(), request.getHeader("Cookie"));
+            /* nunca se loguea el header Cookie: trae los tokens de sesión */
+            log.debug("Sin autenticacion (anonima o nula) para {} {}", request.getMethod(), request.getRequestURI());
             filterChain.doFilter(request, response);
             return;
         }
@@ -43,7 +43,7 @@ public class JwtFilter extends OncePerRequestFilter {
         /* extraer el id token de la cookie httpOnly (antes viajaba en el header X-Id-Token) */
         String idTokenString = CookieUtil.leerCookie(request, "id_token");
         if (idTokenString == null || idTokenString.isBlank()) {
-            log.error("Id token no proporcionado. Cookie header crudo: {}", request.getHeader("Cookie"));
+            log.error("Id token no proporcionado");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Id token no proporcionado");
             return;
         }
@@ -51,7 +51,7 @@ public class JwtFilter extends OncePerRequestFilter {
         /* verificar que el refresh token existe y no está vacío (antes viajaba en X-Refresh-Token) */
         String refreshToken = CookieUtil.leerCookie(request, "refresh_token");
         if (refreshToken == null || refreshToken.isBlank()) {
-            log.error("Refresh token no proporcionado. Cookie header crudo: {}", request.getHeader("Cookie"));
+            log.error("Refresh token no proporcionado");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
             return;
         }
