@@ -1,5 +1,6 @@
 package com.sanosysalvos.bff.service;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.Set;
 
@@ -81,7 +82,10 @@ public class ProxyService {
 
         /* .body(null) explota (NPE) en peticiones sin body como GET/DELETE; solo se agrega si existe */
         RestClient.RequestBodySpec requestSpec = restClient.method(httpMethod)
-                .uri(urlDestino)
+                /* URI.create: la ruta y el query ya vienen codificados desde el navegador
+                 * (ej. contentType=image%2Fjpeg); con uri(String) RestClient los volvía a
+                 * codificar (%2F → %252F) y el microservicio recibía el texto literal "image%2Fjpeg" */
+                .uri(URI.create(urlDestino))
                 .headers(h -> h.addAll(headers)); /* pasa todos los headers incluyendo Authorization */
 
         ResponseEntity<byte[]> respuesta = (body != null ? requestSpec.body(body) : requestSpec)
