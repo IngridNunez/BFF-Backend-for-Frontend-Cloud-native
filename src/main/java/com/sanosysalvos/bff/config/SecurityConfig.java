@@ -44,6 +44,10 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/error").permitAll() /* sin esto, un sendError() de cualquier filtro (ej. CsrfHeaderFilter) reenvia a /error y esa segunda evaluacion de seguridad pisa el status real con un 401 generico */
                 .requestMatchers("/api/v1/auth/**").permitAll() /* entrar/preguntar/salir de la sesion no requiere sesion previa */
+                /* estas dos van ANTES del permitAll de abajo: mis-mascotas y presigned-url
+                 * exigen sesión (necesitan X-User-Id), a diferencia del listado/detalle público */
+                .requestMatchers(HttpMethod.GET, "/api/v1/mascotas/mis-mascotas").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/mascotas/presigned-url").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/v1/mascotas", "/api/v1/mascotas/**").permitAll() /* listado y detalle público */
                 .requestMatchers(HttpMethod.GET, "/api/v1/alertas/zona").permitAll() /* búsqueda de alertas pública */
                 .requestMatchers(HttpMethod.POST, "/api/v1/contactos").permitAll() /* cualquiera puede contactar por una mascota, sin cuenta */
