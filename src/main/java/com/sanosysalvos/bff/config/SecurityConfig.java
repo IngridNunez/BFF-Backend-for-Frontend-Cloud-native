@@ -51,6 +51,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/mascotas", "/api/v1/mascotas/**").permitAll() /* listado y detalle público */
                 .requestMatchers(HttpMethod.GET, "/api/v1/alertas/zona").permitAll() /* búsqueda de alertas pública */
                 .requestMatchers(HttpMethod.POST, "/api/v1/contactos").permitAll() /* cualquiera puede contactar por una mascota, sin cuenta */
+                /* link del correo de contacto: el token (no la sesión) autoriza el cambio */
+                .requestMatchers(HttpMethod.POST, "/api/v1/mascotas/{id}/confirmar-reunificacion").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2 /* configura el servidor de recursos OAuth2 para usar JWT */
