@@ -74,7 +74,9 @@ public class AuthController {
             Jwt idToken = idTokenDecoder.decode(idTokenCookie);
             String email = idToken.getClaimAsString("email");
             String nombre = idToken.getClaimAsString("name");
-            return ResponseEntity.ok(new UsuarioSesionDto(email, nombre != null ? nombre : email));
+            java.util.List<String> grupos = idToken.getClaimAsStringList("cognito:groups");
+            boolean esAdministrador = grupos != null && grupos.contains("Administradores");
+            return ResponseEntity.ok(new UsuarioSesionDto(email, nombre != null ? nombre : email, esAdministrador));
         } catch (JwtException e) {
             return ResponseEntity.status(401).build();
         }
