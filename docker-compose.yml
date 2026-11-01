@@ -19,6 +19,10 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://discovery-server:8761/eureka/}
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
       COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      # Chat: el WebSocket va directo a ms-chat con un ticket que firma el bff. El secreto debe ser
+      # el mismo que usa ms-chat (min. 32 caracteres); sin él POST /api/v1/chat/ticket responde 503.
+      CHAT_TICKET_SECRET: ${CHAT_TICKET_SECRET:-}
+      CHAT_WS_URL: ${CHAT_WS_URL:-ws://localhost:8084/api/v1/ws/chat}
 
 networks:
   sanos-y-salvos-network:
