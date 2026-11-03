@@ -8,12 +8,17 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /*
  * separado de SecurityConfig para evitar el ciclo: SecurityConfig -> JwtFilter -> JwtDecoder -> SecurityConfig
+ *
+ * Los dos decoders usan withJwkSetUri(...): NO hace ninguna llamada de red al crear el bean, las claves de
+ * Cognito se piden recién al validar el primer token. Antes se usaba JwtDecoders.fromIssuerLocation(issuer),
+ * que consulta a Cognito al arrancar: si Cognito no respondía o las variables estaban vacías, el BFF (único
+ * punto de entrada) ni siquiera arrancaba. Es el mismo criterio que ms-alertas y ms-mascotas.
+ * Los beans se inyectan con @Qualifier("jwtDecoder") / @Qualifier("idTokenDecoder"), no por el nombre del parámetro.
  */
 @Configuration
 public class JwtDecoderConfig {
@@ -23,9 +28,10 @@ public class JwtDecoderConfig {
           */
     public NimbusJwtDecoder jwtDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
             @Value("${cognito.client-id}") String clientId) {
 
-        NimbusJwtDecoder decoder = (NimbusJwtDecoder) JwtDecoders.fromIssuerLocation(issuer); /* descarga jwks de cognito y valida firma */
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build(); /* valida la firma con las claves de cognito (lazy) */
 
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer); /* valida que el token sea de nuestro cognito */
 
@@ -43,14 +49,15 @@ public class JwtDecoderConfig {
         return decoder;
     }
 
-    @Bean /* decoder separado para el X-Id-Token: un id token de Cognito trae token_use="id" y el client-id
+    @Bean /* decoder separado para el id token: un id token de Cognito trae token_use="id" y el client-id
             * viaja en el claim "aud" (no "client_id"), por lo que no puede validarse con el decoder de arriba
           */
     public NimbusJwtDecoder idTokenDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
             @Value("${cognito.client-id}") String clientId) {
 
-        NimbusJwtDecoder decoder = (NimbusJwtDecoder) JwtDecoders.fromIssuerLocation(issuer);
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
 
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
 
