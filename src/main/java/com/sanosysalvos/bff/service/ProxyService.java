@@ -30,6 +30,9 @@ public class ProxyService {
      * Si se copiaban, una respuesta "Transfer-Encoding: chunked" del microservicio salía
      * del bff con chunked + Content-Length a la vez; el ALB la descartaba (protección
      * contra HTTP desync) y el navegador recibía 503 (pasaba con /mascotas/presigned-url). */
+    /* identidad en la que confían los microservicios: nunca se reenvía lo que mande el cliente */
+    private static final Set<String> HEADERS_DE_IDENTIDAD = Set.of("x-user-id", "x-user-email");
+
     private static final Set<String> HEADERS_HOP_BY_HOP = Set.of(
             "connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
             "proxy-authenticate", "proxy-authorization", "content-length");
@@ -55,9 +58,13 @@ public class ProxyService {
 
         HttpMethod httpMethod = HttpMethod.valueOf(request.getMethod()); /* convierte el método HTTP */
 
-        /* copiar headers de la petición original */
+        /* copiar headers de la petición original, salvo los de identidad: esos solo los pone el bff
+         * (más abajo, desde el token ya validado). Si se copiaran los del cliente, el microservicio
+         * recibiría el del atacante primero y podría hacerse pasar por otro usuario */
         HttpHeaders headers = new HttpHeaders();
         Collections.list(request.getHeaderNames())
+                .stream()
+                .filter(name -> !HEADERS_DE_IDENTIDAD.contains(name.toLowerCase()))
                 .forEach(name -> headers.add(name, request.getHeader(name)));
 
         /* el access token ahora viaja en la cookie httpOnly, no en el header
@@ -72,12 +79,12 @@ public class ProxyService {
         /* agregar el sub extraido del JWT como header para los microservicios */
         String userId = (String) request.getAttribute("X-User-Id");
         if (userId != null) {
-            headers.add("X-User-Id", userId);
+            headers.set("X-User-Id", userId);
         }
         /* agregar el correo extraido del id token como header (ms-mascotas guarda el correo del dueño) */
         String userEmail = (String) request.getAttribute("X-User-Email");
         if (userEmail != null) {
-            headers.add("X-User-Email", userEmail);
+            headers.set("X-User-Email", userEmail);
         }
 
         /* .body(null) explota (NPE) en peticiones sin body como GET/DELETE; solo se agrega si existe */
