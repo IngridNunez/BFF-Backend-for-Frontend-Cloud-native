@@ -322,4 +322,44 @@ class ProxyServiceTest {
 
         assertThat(respuesta.getStatusCode().value()).isEqualTo(502);
     }
+
+    // ---------- secreto de servicio ----------
+
+    private static final String SECRETO = "secreto-de-servicio-de-prueba-de-al-menos-32-caracteres";
+
+    @Test
+    void laPeticionConSesionLlevaElSecretoDeServicioParaQueElMicroservicioConfieEnLaIdentidad() {
+        org.springframework.test.util.ReflectionTestUtils.setField(proxyService, "tokenInterno", SECRETO);
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("POST", "/api/v1/mascotas/123");
+        request.setAttribute("X-User-Id", "sub-real");
+        request.setAttribute("X-User-Email", "real@example.com");
+
+        proxyService.proxy(request, "{}".getBytes());
+
+        assertThat(headersReenviados().get("X-Internal-Token")).containsExactly(SECRETO);
+    }
+
+    @Test
+    void sinSesionNoSeEnviaElSecreto() {
+        org.springframework.test.util.ReflectionTestUtils.setField(proxyService, "tokenInterno", SECRETO);
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+
+        proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(headersReenviados().containsHeader("X-Internal-Token")).isFalse();
+    }
+
+    @Test
+    void elSecretoQueMandeElClienteNuncaSeReenvia() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/mascotas");
+        request.addHeader("X-Internal-Token", "token-inventado-por-el-cliente");
+        request.setAttribute("X-User-Id", "sub-real");
+
+        proxyService.proxy(request, null);
+
+        /* sin secreto configurado en el bff no se manda ninguno, y el del cliente tampoco pasa */
+        assertThat(headersReenviados().containsHeader("X-Internal-Token")).isFalse();
+    }
 }

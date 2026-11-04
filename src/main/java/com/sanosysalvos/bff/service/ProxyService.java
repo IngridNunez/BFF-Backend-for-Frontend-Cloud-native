@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatusCode;
@@ -31,6 +32,12 @@ public class ProxyService {
 
     private final ServiciosProperties serviciosProperties; /* propiedades de configuración de los servicios */
     private final RestClient restClient; /* cliente REST (con timeouts, ver RestClientConfig) */
+
+    /* secreto de servicio compartido con los microservicios (INTERNAL_API_TOKEN). Se manda junto con los headers de
+     * identidad: sin él, un microservicio no puede distinguir el X-User-Email que armó el bff del que pondría alguien
+     * que lo llame directo (ms-chat lo usa para no avisar por correo a un tercero). Vacío = no se manda. */
+    @Value("${internal.api-token:}")
+    private String tokenInterno = "";
 
     /* Único conjunto de headers del cliente que se reenvía a los microservicios. Todo lo demás se
      * descarta, en especial Cookie (trae id_token y refresh_token, que los microservicios no deben
@@ -143,6 +150,10 @@ public class ProxyService {
         String userEmail = (String) request.getAttribute("X-User-Email");
         if (userEmail != null) {
             headers.set("X-User-Email", userEmail);
+        }
+        /* solo en peticiones con sesión validada, que son las que llevan identidad */
+        if ((userId != null || userEmail != null) && tokenInterno != null && !tokenInterno.isBlank()) {
+            headers.set("X-Internal-Token", tokenInterno.strip());
         }
         return headers;
     }
