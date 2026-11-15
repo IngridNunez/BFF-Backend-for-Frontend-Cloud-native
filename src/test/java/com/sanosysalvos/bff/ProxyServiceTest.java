@@ -2,7 +2,6 @@ package com.sanosysalvos.bff;
 
 import com.sanosysalvos.bff.config.ServiciosProperties;
 import com.sanosysalvos.bff.service.ProxyService;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,19 +10,24 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.net.URI;
-import java.util.Collections;
 import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,296 +42,324 @@ class ProxyServiceTest {
     @InjectMocks
     private ProxyService proxyService;
 
-    private RestClient.RequestHeadersUriSpec healthUriSpec;
-    private RestClient.RequestHeadersSpec healthHeadersSpec;
-    private RestClient.ResponseSpec healthResponseSpec;
+    private RestClient.RequestBodyUriSpec requestBodyUriSpec;
+    private RestClient.RequestBodySpec requestBodySpec;
+    private RestClient.ResponseSpec responseSpec;
 
     @BeforeEach
-    void setUpHealthCheck() {
-        healthUriSpec = mock(RestClient.RequestHeadersUriSpec.class);
-        healthHeadersSpec = mock(RestClient.RequestHeadersSpec.class);
-        healthResponseSpec = mock(RestClient.ResponseSpec.class);
+    void configurarRutas() {
+        lenient().when(serviciosProperties.getRutas())
+                .thenReturn(Map.of("mascotas", "ms-mascotas:8082", "alertas", "ms-alertas:8083"));
     }
 
-    private void mockServicioDisponible(boolean disponible) {
-        when(restClient.get()).thenReturn(healthUriSpec);
-        when(healthUriSpec.uri(anyString())).thenReturn(healthHeadersSpec);
-        when(healthHeadersSpec.retrieve()).thenReturn(healthResponseSpec);
-        if (disponible) {
-            when(healthResponseSpec.body(String.class)).thenReturn("{\"status\":\"UP\"}");
-        } else {
-            when(healthResponseSpec.body(String.class)).thenThrow(new RuntimeException("no responde"));
-        }
+    /* arma la cadena de RestClient y hace que la llamada devuelva "respuesta" */
+    private void elMicroserviceResponde(ResponseEntity<byte[]> respuesta) {
+        prepararCadena();
+        when(responseSpec.toEntity(byte[].class)).thenReturn(respuesta);
     }
 
-    private HttpServletRequest mockRequest(String uri, String metodo, String userId) {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn(uri);
-        when(request.getMethod()).thenReturn(metodo);
-        when(request.getHeaderNames())
-                .thenReturn(Collections.enumeration(java.util.List.of("Authorization")));
-        when(request.getHeader("Authorization")).thenReturn("Bearer access-token");
-        when(request.getAttribute("X-User-Id")).thenReturn(userId);
-        return request;
+    /* ... o que falle con la excepcion indicada */
+    private void elMicroserviceFalla(RuntimeException error) {
+        prepararCadena();
+        when(responseSpec.toEntity(byte[].class)).thenThrow(error);
     }
 
-    private HttpServletRequest mockRequestConQuery(String uri, String query) {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn(uri);
-        when(request.getMethod()).thenReturn("GET");
-        when(request.getQueryString()).thenReturn(query);
-        when(request.getHeaderNames()).thenReturn(Collections.enumeration(java.util.List.of()));
-        return request;
-    }
-
-    private HttpServletRequest mockRequestSoloUri(String uri) {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn(uri);
-        return request;
-    }
-
-    @Test
-    void proxy_cuandoServicioDisponible_reenviaSolicitudYDevuelveRespuesta() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-        ResponseEntity<byte[]> respuestaEsperada = ResponseEntity.ok("hola".getBytes());
-
+    private void prepararCadena() {
+        requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
+        requestBodySpec = mock(RestClient.RequestBodySpec.class);
+        responseSpec = mock(RestClient.ResponseSpec.class);
         when(restClient.method(any())).thenReturn(requestBodyUriSpec);
         when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(respuestaEsperada);
-
-        HttpServletRequest request = mockRequest("/api/v1/mascotas", "GET", null);
-
-        ResponseEntity<byte[]> respuesta = proxyService.proxy(request, "body".getBytes());
-
-        /* el bff arma una respuesta nueva (sin headers hop-by-hop): se compara estado y body, no la instancia */
-        assertThat(respuesta.getStatusCode()).isEqualTo(respuestaEsperada.getStatusCode());
-        assertThat(respuesta.getBody()).isEqualTo(respuestaEsperada.getBody());
-        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas/api/v1/mascotas"));
     }
 
-    @Test
-    void proxy_cuandoServicioNoDisponible_devuelve202ConRetryAfter() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(false);
-
-        HttpServletRequest request = mockRequestSoloUri("/api/v1/mascotas");
-
-        ResponseEntity<byte[]> respuesta = proxyService.proxy(request, null);
-
-        assertThat(respuesta.getStatusCode().value()).isEqualTo(202);
-        assertThat(respuesta.getHeaders().getFirst("Retry-After")).isEqualTo("2");
-        assertThat(new String(respuesta.getBody())).isEqualTo("Solicitud en cola, reintenta en 2 segundos");
+    private MockHttpServletRequest peticion(String metodo, String uri) {
+        return new MockHttpServletRequest(metodo, uri);
     }
 
-    @Test
-    void proxy_agregaHeaderXUserId_cuandoEstaPresenteEnLaRequest() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
-
-        HttpServletRequest request = mockRequest("/api/v1/mascotas", "GET", "user-123");
-
-        proxyService.proxy(request, new byte[0]);
-
-        @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")
+    private HttpHeaders headersReenviados() {
         ArgumentCaptor<Consumer<HttpHeaders>> captor = ArgumentCaptor.forClass(Consumer.class);
         verify(requestBodySpec).headers(captor.capture());
-
-        HttpHeaders headers = new HttpHeaders();
-        captor.getValue().accept(headers);
-
-        assertThat(headers.getFirst("X-User-Id")).isEqualTo("user-123");
-        assertThat(headers.getFirst("Authorization")).isEqualTo("Bearer access-token");
+        HttpHeaders destino = new HttpHeaders();
+        captor.getValue().accept(destino);
+        return destino;
     }
 
-    @Test
-    void proxy_noAgregaHeaderXUserId_cuandoNoEstaPresenteEnLaRequest() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
-
-        HttpServletRequest request = mockRequest("/api/v1/mascotas", "GET", null);
-
-        proxyService.proxy(request, new byte[0]);
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Consumer<HttpHeaders>> captor = ArgumentCaptor.forClass(Consumer.class);
-        verify(requestBodySpec).headers(captor.capture());
-
-        HttpHeaders headers = new HttpHeaders();
-        captor.getValue().accept(headers);
-
-        assertThat(headers.get("X-User-Id")).isNull();
-    }
+    // ---------- reenvío básico ----------
 
     @Test
-    void proxy_conBodyNulo_noLanzaNpeYNoLlamaBody() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
+    void reenviaLaSolicitudAlPuertoDelServicioYDevuelveLaRespuesta() {
+        elMicroserviceResponde(ResponseEntity.ok("hola".getBytes()));
 
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-        ResponseEntity<byte[]> respuestaEsperada = ResponseEntity.ok("mascotas".getBytes());
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(respuestaEsperada);
-
-        ResponseEntity<byte[]> respuesta = proxyService.proxy(mockRequest("/api/v1/mascotas", "GET", null), null);
-
-        /* el bff arma una respuesta nueva (sin headers hop-by-hop): se compara estado y body, no la instancia */
-        assertThat(respuesta.getStatusCode()).isEqualTo(respuestaEsperada.getStatusCode());
-        assertThat(respuesta.getBody()).isEqualTo(respuestaEsperada.getBody());
-        verify(requestBodySpec, org.mockito.Mockito.never()).body(any(byte[].class));
-    }
-
-    @Test
-    void proxy_conQueryString_laIncluyeEnLaUrlDestino() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("alertas", "ms-alertas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
-
-        proxyService.proxy(mockRequestConQuery("/api/v1/alertas/zona", "lat=1&lng=2&radioKm=3"), null);
-
-        verify(requestBodyUriSpec).uri(URI.create("http://ms-alertas/api/v1/alertas/zona?lat=1&lng=2&radioKm=3"));
-    }
-
-    @Test
-    void proxy_consultaElHealthBajoApiV1() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(false);
-
-        proxyService.proxy(mockRequestSoloUri("/api/v1/mascotas"), null);
-
-        verify(healthUriSpec).uri("http://ms-mascotas/api/v1/actuator/health");
-    }
-
-    @Test
-    void proxy_construyeUrlDestinoConRutaAnidada() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any(byte[].class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
-
-        HttpServletRequest request = mockRequest("/api/v1/mascotas/123", "GET", null);
-
-        proxyService.proxy(request, new byte[0]);
-
-        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas/api/v1/mascotas/123"));
-    }
-
-    @Test
-    void proxy_quitaHeadersHopByHopDeLaRespuestaYMantieneLosDemas() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
-
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
-
-        /* así responde ms-mascotas en /mascotas/presigned-url: chunked + connection close */
-        HttpHeaders headersMicroservicio = new HttpHeaders();
-        headersMicroservicio.add("Transfer-Encoding", "chunked");
-        headersMicroservicio.add("Connection", "close");
-        headersMicroservicio.add("Content-Type", "application/json");
-        ResponseEntity<byte[]> respuestaMicroservicio =
-                new ResponseEntity<>("{\"url\":\"x\"}".getBytes(), headersMicroservicio, org.springframework.http.HttpStatus.OK);
-
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(respuestaMicroservicio);
-
-        HttpServletRequest request = mockRequest("/api/v1/mascotas/presigned-url", "GET", "user-123");
-
-        ResponseEntity<byte[]> respuesta = proxyService.proxy(request, null);
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas"), "body".getBytes());
 
         assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
-        assertThat(respuesta.getHeaders().get("Transfer-Encoding")).isNull();
-        assertThat(respuesta.getHeaders().get("Connection")).isNull();
-        assertThat(respuesta.getHeaders().getFirst("Content-Type")).isEqualTo("application/json");
-        assertThat(new String(respuesta.getBody())).isEqualTo("{\"url\":\"x\"}");
+        assertThat(respuesta.getBody()).isEqualTo("hola".getBytes());
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas:8082/api/v1/mascotas"));
+        verify(requestBodySpec).body("body".getBytes());
     }
 
     @Test
-    void proxy_noVuelveACodificarElQueryYaCodificado() {
-        when(serviciosProperties.getRutas()).thenReturn(Map.of("mascotas", "ms-mascotas"));
-        mockServicioDisponible(true);
+    void noHaceUnSondeoDeSaludAntesDeCadaLlamada() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
 
-        RestClient.RequestBodyUriSpec requestBodyUriSpec = mock(RestClient.RequestBodyUriSpec.class);
-        RestClient.RequestBodySpec requestBodySpec = mock(RestClient.RequestBodySpec.class);
-        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+        proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
 
-        when(restClient.method(any())).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(any(URI.class))).thenReturn(requestBodySpec);
-        when(requestBodySpec.headers(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-        when(responseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(new byte[0]));
+        /* antes se hacía un GET a /actuator/health del destino por cada petición (el doble de latencia y carga) */
+        verify(restClient, never()).get();
+    }
 
-        /* así llega desde el navegador: la "/" de image/jpeg viene como %2F */
-        proxyService.proxy(mockRequestConQuery("/api/v1/mascotas/presigned-url",
-                "fileName=foto.jpg&contentType=image%2Fjpeg&fileSize=1000"), null);
+    @Test
+    void conBodyNuloNoLlamaABody() {
+        elMicroserviceResponde(ResponseEntity.ok("mascotas".getBytes()));
 
-        /* se reenvía igual, sin transformarse en %252F */
-        verify(requestBodyUriSpec).uri(URI.create(
-                "http://ms-mascotas/api/v1/mascotas/presigned-url?fileName=foto.jpg&contentType=image%2Fjpeg&fileSize=1000"));
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(respuesta.getBody()).isEqualTo("mascotas".getBytes());
+        verify(requestBodySpec, never()).body(any(byte[].class));
+    }
+
+    @Test
+    void incluyeElQueryStringEnLaUrlDestino() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/alertas/zona");
+        request.setQueryString("lat=1&lng=2&radioKm=3");
+
+        proxyService.proxy(request, null);
+
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-alertas:8083/api/v1/alertas/zona?lat=1&lng=2&radioKm=3"));
+    }
+
+    @Test
+    void noVuelveACodificarElQueryYaCodificado() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/mascotas/presigned-url");
+        request.setQueryString("contentType=image%2Fjpeg");
+
+        proxyService.proxy(request, null);
+
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas:8082/api/v1/mascotas/presigned-url?contentType=image%2Fjpeg"));
+    }
+
+    @Test
+    void construyeLaUrlConRutaAnidada() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+
+        proxyService.proxy(peticion("GET", "/api/v1/mascotas/123/estado"), null);
+
+        verify(requestBodyUriSpec).uri(URI.create("http://ms-mascotas:8082/api/v1/mascotas/123/estado"));
+    }
+
+    @Test
+    void usaElMetodoHttpDeLaPeticion() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+
+        proxyService.proxy(peticion("PATCH", "/api/v1/mascotas/123"), "{}".getBytes());
+
+        verify(restClient).method(HttpMethod.PATCH);
+    }
+
+    // ---------- respuesta ----------
+
+    @Test
+    void quitaLosHeadersHopByHopDeLaRespuestaYMantieneLosDemas() {
+        HttpHeaders delMicroservicio = new HttpHeaders();
+        delMicroservicio.add("Transfer-Encoding", "chunked");
+        delMicroservicio.add("Connection", "keep-alive");
+        delMicroservicio.add("Content-Length", "4");
+        delMicroservicio.add("Content-Type", "application/json");
+        delMicroservicio.add("X-Otro", "valor");
+        elMicroserviceResponde(new ResponseEntity<>("{}".getBytes(), delMicroservicio, 200));
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(respuesta.getHeaders().containsHeader("Transfer-Encoding")).isFalse();
+        assertThat(respuesta.getHeaders().containsHeader("Connection")).isFalse();
+        assertThat(respuesta.getHeaders().containsHeader("Content-Length")).isFalse();
+        assertThat(respuesta.getHeaders().getFirst("Content-Type")).isEqualTo("application/json");
+        assertThat(respuesta.getHeaders().getFirst("X-Otro")).isEqualTo("valor");
+    }
+
+    @Test
+    void reenviaTalCualElErrorDelMicroservicio() {
+        elMicroserviceResponde(ResponseEntity.status(404).body("{\"mensaje\":\"no existe\"}".getBytes()));
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas/x"), null);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(404);
+        assertThat(new String(respuesta.getBody())).contains("no existe");
+    }
+
+    // ---------- headers hacia el microservicio (lista permitida) ----------
+
+    @Test
+    void soloSeReenvianLosHeadersPermitidosYNuncaLasCookies() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("POST", "/api/v1/mascotas");
+        request.addHeader("Content-Type", "application/json");
+        request.addHeader("Accept", "application/json");
+        request.addHeader("Accept-Language", "es-CL");
+        /* nada de esto debe llegar a los microservicios */
+        request.addHeader("Cookie", "access_token=a; id_token=i; refresh_token=r");
+        request.addHeader("Authorization", "Bearer token-que-manda-el-cliente");
+        request.addHeader("Origin", "https://otro-sitio.example");
+        request.addHeader("X-Forwarded-For", "6.6.6.6");
+        request.addHeader("X-Requested-With", "web");
+        request.addHeader("User-Agent", "curl");
+
+        proxyService.proxy(request, "{}".getBytes());
+
+        HttpHeaders enviados = headersReenviados();
+        assertThat(enviados.getFirst("Content-Type")).isEqualTo("application/json");
+        assertThat(enviados.getFirst("Accept")).isEqualTo("application/json");
+        assertThat(enviados.getFirst("Accept-Language")).isEqualTo("es-CL");
+        assertThat(enviados.headerNames()).doesNotContain("Cookie", "Origin", "X-Forwarded-For", "X-Requested-With", "User-Agent");
+        /* el Authorization que manda el cliente no pasa: solo se arma uno desde la cookie access_token */
+        assertThat(enviados.get("Authorization")).containsExactly("Bearer a");
+    }
+
+    @Test
+    void elAuthorizationSeReconstruyeDesdeLaCookieDeAccessToken() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/mascotas/mis-mascotas");
+        request.addHeader("Cookie", "id_token=i; access_token=mi-access-token; refresh_token=r");
+        request.addHeader("Authorization", "Bearer otro-token");
+
+        proxyService.proxy(request, null);
+
+        HttpHeaders enviados = headersReenviados();
+        assertThat(enviados.get("Authorization")).containsExactly("Bearer mi-access-token");
+        assertThat(enviados.containsHeader("Cookie")).isFalse();
+    }
+
+    // ---------- identidad: solo la que valida el bff ----------
+
+    @Test
+    void usuarioAutenticadoAlMicroservicioSoloLlegaSuIdentidadValidada() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("PATCH", "/api/v1/mascotas/123");
+        /* el atacante manda los suyos, con distintas mayúsculas */
+        request.addHeader("X-User-Id", "sub-de-la-victima");
+        request.addHeader("x-user-email", "victima@example.com");
+        /* lo que de verdad validó el bff */
+        request.setAttribute("X-User-Id", "sub-real");
+        request.setAttribute("X-User-Email", "real@example.com");
+
+        proxyService.proxy(request, "{}".getBytes());
+
+        HttpHeaders enviados = headersReenviados();
+        assertThat(enviados.get("X-User-Id")).containsExactly("sub-real");
+        assertThat(enviados.get("X-User-Email")).containsExactly("real@example.com");
+    }
+
+    @Test
+    void peticionSinSesionLosHeadersDeIdentidadDelClienteNoSeReenvian() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/mascotas");
+        request.addHeader("X-User-Id", "sub-de-la-victima");
+        request.addHeader("X-User-Email", "victima@example.com");
+
+        proxyService.proxy(request, null);
+
+        HttpHeaders enviados = headersReenviados();
+        assertThat(enviados.containsHeader("X-User-Id")).isFalse();
+        assertThat(enviados.containsHeader("X-User-Email")).isFalse();
+    }
+
+    // ---------- rutas mal formadas ----------
+
+    @Test
+    void unaRutaSinServicioDevuelve404SinLlamarANadie() {
+        for (String uri : new String[] { "/api/v1", "/api/v1/", "/api/v1//mascotas" }) {
+            ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", uri), null);
+
+            assertThat(respuesta.getStatusCode().value()).as(uri).isEqualTo(404);
+        }
+        verifyNoInteractions(restClient);
+    }
+
+    @Test
+    void unServicioDesconocidoDevuelve404EnVezDeConsultarHttpNull() {
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/foo/x"), null);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(404);
+        assertThat(new String(respuesta.getBody())).contains("Ruta no encontrada");
+        verifyNoInteractions(restClient);
+    }
+
+    // ---------- microservicio caído o colgado ----------
+
+    @Test
+    void siElMicroservicioNoResponde_devuelve503ConRetryAfterYNoUn202() {
+        elMicroserviceFalla(new ResourceAccessException("Connection refused"));
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("POST", "/api/v1/mascotas"), "{}".getBytes());
+
+        /* antes: 202 "Solicitud en cola" aunque nada se encolaba y el reporte se perdía */
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(503);
+        assertThat(respuesta.getHeaders().getFirst("Retry-After")).isEqualTo("2");
+        assertThat(respuesta.getHeaders().getContentType().toString()).startsWith("application/json");
+    }
+
+    @Test
+    void siSeAgotaElTimeout_devuelve503() {
+        elMicroserviceFalla(new ResourceAccessException("Read timed out"));
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(503);
+    }
+
+    @Test
+    void siLaRespuestaDelMicroservicioEsInvalida_devuelve502() {
+        elMicroserviceFalla(new RestClientException("respuesta ilegible"));
+
+        ResponseEntity<byte[]> respuesta = proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(502);
+    }
+
+    // ---------- secreto de servicio ----------
+
+    private static final String SECRETO = "secreto-de-servicio-de-prueba-de-al-menos-32-caracteres";
+
+    @Test
+    void laPeticionConSesionLlevaElSecretoDeServicioParaQueElMicroservicioConfieEnLaIdentidad() {
+        org.springframework.test.util.ReflectionTestUtils.setField(proxyService, "tokenInterno", SECRETO);
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("POST", "/api/v1/mascotas/123");
+        request.setAttribute("X-User-Id", "sub-real");
+        request.setAttribute("X-User-Email", "real@example.com");
+
+        proxyService.proxy(request, "{}".getBytes());
+
+        assertThat(headersReenviados().get("X-Internal-Token")).containsExactly(SECRETO);
+    }
+
+    @Test
+    void sinSesionNoSeEnviaElSecreto() {
+        org.springframework.test.util.ReflectionTestUtils.setField(proxyService, "tokenInterno", SECRETO);
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+
+        proxyService.proxy(peticion("GET", "/api/v1/mascotas"), null);
+
+        assertThat(headersReenviados().containsHeader("X-Internal-Token")).isFalse();
+    }
+
+    @Test
+    void elSecretoQueMandeElClienteNuncaSeReenvia() {
+        elMicroserviceResponde(ResponseEntity.ok(new byte[0]));
+        MockHttpServletRequest request = peticion("GET", "/api/v1/mascotas");
+        request.addHeader("X-Internal-Token", "token-inventado-por-el-cliente");
+        request.setAttribute("X-User-Id", "sub-real");
+
+        proxyService.proxy(request, null);
+
+        /* sin secreto configurado en el bff no se manda ninguno, y el del cliente tampoco pasa */
+        assertThat(headersReenviados().containsHeader("X-Internal-Token")).isFalse();
     }
 }

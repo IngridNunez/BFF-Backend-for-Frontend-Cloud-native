@@ -5,7 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,11 +19,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
-@RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtFilter.class);
-    private final JwtDecoder idTokenDecoder; /* decoder específico para el X-Id-Token (no exige token_use=access) */
+    private final JwtDecoder idTokenDecoder; /* decoder específico para el id token (no exige token_use=access) */
+
+    /* constructor explícito para poder usar @Qualifier: inyectar por el nombre del parámetro es frágil ante renombres */
+    public JwtFilter(@Qualifier("idTokenDecoder") JwtDecoder idTokenDecoder) {
+        this.idTokenDecoder = idTokenDecoder;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -48,13 +52,8 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        /* verificar que el refresh token existe y no está vacío (antes viajaba en X-Refresh-Token) */
-        String refreshToken = CookieUtil.leerCookie(request, "refresh_token");
-        if (refreshToken == null || refreshToken.isBlank()) {
-            log.error("Refresh token no proporcionado");
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
-            return;
-        }
+        /* el refresh_token ya no se exige ni se guarda: nada lo usaba (solo se comprobaba que no viniera vacío,
+         * así que "refresh_token=x" pasaba) y viajaba en cada petición ampliando la superficie de exposición */
 
         try {
             /* validar el id token usando el decoder de Spring Security */

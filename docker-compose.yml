@@ -19,9 +19,14 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://discovery-server:8761/eureka/}
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
       COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      # En producción (detrás de API Gateway/ALB el bff no ve el https) poner BFF_COOKIES_SECURE=true
+      # para que las cookies de sesión salgan con el atributo Secure. En local (http) queda en false.
+      BFF_COOKIES_SECURE: ${BFF_COOKIES_SECURE:-false}
       # Chat: el WebSocket va directo a ms-chat con un ticket que firma el bff. El secreto debe ser
       # el mismo que usa ms-chat (min. 32 caracteres); sin él POST /api/v1/chat/ticket responde 503.
       CHAT_TICKET_SECRET: ${CHAT_TICKET_SECRET:-}
+      # secreto de servicio (el mismo de ms-mascotas, ms-alertas y ms-chat): ms-chat solo confía en X-User-Email si llega con él
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       CHAT_WS_URL: ${CHAT_WS_URL:-ws://localhost:8084/api/v1/ws/chat}
 
 networks:

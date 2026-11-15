@@ -109,27 +109,18 @@ class JwtFilterTest {
     }
 
     @Test
-    void doFilter_sinRefreshToken_devuelve401() throws Exception {
+    void doFilter_yaNoExigeRefreshToken_conAccessEIdTokenValidosDejaPasar() throws Exception {
+        /* el refresh_token ya no se emite ni se exige: antes "refresh_token=x" pasaba la validación sin significar nada */
         jwtFilter = new JwtFilter(idTokenDecoder);
         autenticarComo(jwtConSubject("usuario-1"));
         conCookies(new Cookie("id_token", "id-token"));
+        when(idTokenDecoder.decode("id-token")).thenReturn(jwtConSubject("usuario-1"));
 
         jwtFilter.doFilterInternal(request, response, filterChain);
 
-        verify(response).sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
-        verifyNoInteractions(filterChain);
-    }
-
-    @Test
-    void doFilter_refreshTokenEnBlanco_devuelve401() throws Exception {
-        jwtFilter = new JwtFilter(idTokenDecoder);
-        autenticarComo(jwtConSubject("usuario-1"));
-        conCookies(new Cookie("id_token", "id-token"), new Cookie("refresh_token", "   "));
-
-        jwtFilter.doFilterInternal(request, response, filterChain);
-
-        verify(response).sendError(HttpServletResponse.SC_UNAUTHORIZED, "Refresh token no proporcionado");
-        verifyNoInteractions(filterChain);
+        verify(request).setAttribute("X-User-Id", "usuario-1");
+        verify(filterChain, times(1)).doFilter(request, response);
+        verifyNoInteractions(response);
     }
 
     @Test

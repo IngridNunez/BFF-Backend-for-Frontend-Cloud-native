@@ -3,6 +3,8 @@ package com.sanosysalvos.bff.config;
 import com.sanosysalvos.bff.security.CookieBearerTokenResolver;
 import com.sanosysalvos.bff.security.CsrfHeaderFilter;
 import com.sanosysalvos.bff.security.JwtFilter;
+import com.sanosysalvos.bff.security.LimiteBodyFilter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,16 +24,20 @@ public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
     private final List<String> corsAllowedOrigins;
+    private final long maxBodyBytes;
 
-    /* los orígenes permitidos se leen de CORS_ALLOWED_ORIGINS (separados por coma); en local queda localhost:5173 */
+    /* los orígenes permitidos se leen de CORS_ALLOWED_ORIGINS (separados por coma); en local queda localhost:5173.
+     * El body máximo es bff.max-body-bytes (BFF_MAX_BODY_BYTES), 1 MB por defecto */
     public SecurityConfig(JwtFilter jwtFilter,
-                          @Value("${CORS_ALLOWED_ORIGINS:http://localhost:5173}") List<String> corsAllowedOrigins) {
+                          @Value("${CORS_ALLOWED_ORIGINS:http://localhost:5173}") List<String> corsAllowedOrigins,
+                          @Value("${bff.max-body-bytes:1048576}") long maxBodyBytes) {
         this.jwtFilter = jwtFilter;
         this.corsAllowedOrigins = corsAllowedOrigins;
+        this.maxBodyBytes = maxBodyBytes;
     }
 
     @Bean /* configura que rutas son publicas y cuales requieren autenticacion y en que orden se ejecutan los filtros */
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, NimbusJwtDecoder jwtDecoder) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, @Qualifier("jwtDecoder") NimbusJwtDecoder jwtDecoder) throws Exception {
         http
             // Los tokens ahora viajan en cookies httpOnly (antes en headers, API
             // stateless sin cookies, por eso CSRF estaba desactivado). Con cookies
@@ -60,6 +66,7 @@ public class SecurityConfig {
                 .jwt(jwt -> jwt.decoder(jwtDecoder)) /* configura el decoder de JWT */
             )
             .addFilterBefore(new CsrfHeaderFilter(), AuthorizationFilter.class) /* rechaza POST/PATCH/DELETE sin el header anti-CSRF antes de decidir si la ruta es publica */
+            .addFilterBefore(new LimiteBodyFilter(maxBodyBytes), CsrfHeaderFilter.class) /* primero de todos: corta bodies enormes antes de leer nada */
             .addFilterAfter(jwtFilter, AuthorizationFilter.class); /* ejecutar después de que Spring Security ya decidió si la ruta es pública o requiere autenticación, y ya autenticó el access token */
 
         return http.build();
